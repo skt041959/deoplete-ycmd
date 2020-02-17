@@ -1,54 +1,36 @@
 
 # encoding: utf-8
 
-import os
-import time
-import logging
-from .base import Base
-from deoplete.util import load_external_module
-
-load_external_module(__file__, "YouCompleteMe/third_party/ycmd")
-from ycmd import server_utils as su
-su.AddNearestThirdPartyFoldersToSysPath( su.__file__ )
-
-load_external_module(__file__, "YouCompleteMe/python")
-from ycm import base, vimsupport, youcompleteme
-su.AddNearestThirdPartyFoldersToSysPath(os.path.dirname(youcompleteme.__file__))
+from deoplete.base.source import Base
+from deoplete.util import Nvim, UserContext, Candidates
 
 class Source(Base):
+    """"""
 
-    def __init__(self, vim):
-        Base.__init__(self, vim)
+    def __init__(self, vim: Nvim) -> None:
+        """"""
+        super().__init__(vim)
 
         self.name = 'ycmd'
-        self.mark = '[ycmd]'
-        self.filetypes = ['c', 'cpp']
+        self.mark = '[Ycm]'
         self.rank = 500
+        self.is_bytepos = True
+        self.min_pattern_length = 1
+        self.filetypes = ['cpp', 'c']
+        self.input_pattern = r'(\.|::|->)\w*$'
+        self.pyeval = self.vim.funcs.py3eval
 
-        self.input_pattern = (r'[^. \t0-9]\.\w*|'
-                r'[^. \t0-9]->\w*|'
-                r'[a-zA-Z_]\w*::\w*|'
-                r'\[.*\]*\s')
+    def gather_candidates(self, context: UserContext):
+        result = []
+        if context['is_async']:
+            if self.pyeval('ycm_state.CompletionRequestReady()'):
+                context['is_async'] = False
+                result = self.pyeval('ycm_state.GetCompletionResponse()')['completions']
+        else:
+            self.pyeval('ycm_state.SendCompletionRequest( True )')
+            if self.pyeval('ycm_state.CompletionRequestReady()'):
+                result = self.pyeval('ycm_state.GetCompletionResponse()')['completions']
+            else:
+                context['is_async'] = True
 
-    def on_init(self, context):
-        if not self.is_debug_enabled:
-            root_log = logging.getLogger('deoplete')
-            child_log = root_log.getChild('ycmd')
-            child_log.propagate = False
-
-        import sys; self.vim.err_write('\n'.join(sys.path))
-        self.ycm_client = youcompleteme.YouCompleteMe(self.vim, child_log)
-
-    def gather_candidates(self, context):
-        self.ycm_client.SendCompletionRequest( True )
-
-        while not self.ycm_client.CompletionRequestReady():
-            time.sleep(1)
-
-        response = self.ycm_client.GetCompletionResponse()
-
-        out = response['completions']
-
-        return out
-
-
+        return result
