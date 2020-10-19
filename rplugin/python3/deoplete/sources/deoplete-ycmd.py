@@ -1,6 +1,4 @@
-
-# encoding: utf-8
-
+import pynvim
 from deoplete.base.source import Base
 from deoplete.util import Nvim, UserContext, Candidates
 
@@ -17,11 +15,17 @@ class Source(Base):
         self.is_bytepos = True
         self.min_pattern_length = 1
         self.filetypes = ['cpp', 'c']
-        self.input_pattern = r'(\.|::|->)\w*$'
+        self.input_pattern = r'(\\.|::|->)\\w*$'
         self.pyeval = self.vim.funcs.py3eval
+        self.enabled = self.vim.vars.get('loaded_youcompleteme', False)
+        if self.enabled:
+            self.vim.command("autocmd! ycmcompletemecursormove")
 
     def gather_candidates(self, context: UserContext):
         result = []
+        if not self.enabled:
+            return result
+
         if context['is_async']:
             if self.pyeval('ycm_state.CompletionRequestReady()'):
                 context['is_async'] = False
